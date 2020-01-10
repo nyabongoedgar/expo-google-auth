@@ -13,7 +13,6 @@ export default class App extends React.Component {
       files: null,
       fetching: false,
       uploading: false,
-      appDataURL: null,
       wallet: null
     }
   }
@@ -29,6 +28,7 @@ export default class App extends React.Component {
       scopes: ['profile', 'email','https://www.googleapis.com/auth/drive.appdata','https://www.googleapis.com/auth/drive'],
     };
     const { type, accessToken, user } = await Google.logInAsync(config);
+    console.log(accessToken, 'this is the access token')
     
     if (type === 'success') {
       // Then you can use the Google REST API
@@ -55,17 +55,13 @@ export default class App extends React.Component {
   }
 
   storeDataToDrive(){
+    /* This works perfectly, we need to save the ID of the saved file so that we can query it at some point */
     this.retrieveData();
     if(this.state.wallet !== null){
-      const { accessToken } = this.state; 
+      const { accessToken, wallet } = this.state; 
       this.setState({uploading: true});
-      if(accessToken !== null){
+      if((accessToken !== null && wallet !== null)){
         const boundaryString = 'foo_bar_baz';
-        const headers = new Headers()
-        headers.append('Authorization', `Bearer ${accessToken}`)
-        headers.append('Content-Type', `multipart/related; boundary=${boundaryString}`)
-        headers.append('Content-Length', bodyLength)
-        const uploadUrl = 'https://www.googleapis.com/upload/drive/v3';
         const metaData = {
           name: 'data.json',
           description: 'Backup data for my app',
@@ -76,18 +72,22 @@ export default class App extends React.Component {
         const multipartBody = `\r\n--${boundaryString}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`
         + `${JSON.stringify(metaData)}\r\n`
         + `--${boundaryString}\r\nContent-Type: application/json\r\n\r\n`
-        + `${JSON.stringify(this.state.wallet)}\r\n`
+        + `${JSON.stringify(wallet)}\r\n`
         + `--${boundaryString}--`
-
-        fetch(`${uploadUrl}/files?uploadType=multipart`, {
-          ...options,
-          multipartBody,
+       
+        fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': `multipart/related; boundary=${boundaryString}`
+          },
+          body: multipartBody
         })
-        .then(response => response.url)
-        .then(url => this.setState({appDataURL: url}))
-        .catch(err => console.log(err))
+        .then(response => response.json())
+        .then(metaData => alert(JSON.stringify(metaData)))
+        .catch(err => console.log(err, 'this is the error'))
       }else{
-        alert('No google access token detected !')
+        alert('No google access token detected ! Also make sure the Wallet data is present')
       }
     }else{
       alert('There is no data in the wallet to send to the drive api')
@@ -120,35 +120,8 @@ export default class App extends React.Component {
     }
   }
 
-
-  theBody(){
-    const boundaryString = 'foo_bar_baz';
-    const headers = new Headers()
-    headers.append('Authorization', `Bearer ${apiToken}`)
-    headers.append('Content-Type', `multipart/related; boundary=${boundaryString}`)
-    headers.append('Content-Length', bodyLength)
-    const uploadUrl = 'https://www.googleapis.com/upload/drive/v3';
-    const metaData = {
-      name: 'data.json',
-      description: 'Backup data for my app',
-      mimeType: 'application/json',
-      parents: 'appDataFolder'
-    }
-    // request body
-    const multipartBody = `\r\n--${boundaryString}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`
-    + `${JSON.stringify(metaData)}\r\n`
-    + `--${boundaryString}\r\nContent-Type: application/json\r\n\r\n`
-    + `${JSON.stringify(body)}\r\n`
-    + `--${boundaryString}--`
-
-    fetch(`${uploadUrl}/files?uploadType=multipart`, {
-      ...options,
-      multipartBody,
-    })
-  }
-
   render(){
-    const { fetching, files, appDataURL} = this.state;
+    const {fetching, files} = this.state;
     return (
       <View style={styles.container}>
         <Text>{this.state.accessToken ? 'Access token saved to state' : 'Authenticating'}</Text>
@@ -164,7 +137,6 @@ export default class App extends React.Component {
       
         <Gap />
         <Button onPress={() => this.storeDataToDrive()} title={'Save App Data to Google Drive AppData Folder'} />
-        <Text>App data Upload Status : {appDataURL ? appDataURL : 'No data uploaded yet !' }</Text>
 
         <SafeAreaView style={styles.container}>
           <FlatList
