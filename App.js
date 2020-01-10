@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, Button } from 'react-native';
+import { StyleSheet, Text, View, Button, SafeAreaView, FlatList } from 'react-native';
 import * as Google from 'expo-google-app-auth';
 
 export default class App extends React.Component {
@@ -31,33 +31,39 @@ export default class App extends React.Component {
       let userInfoResponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      this.setState({userInfoResponse, accessToken, type}, () => console.log('user info response to state', this.state.userInfoResponse));
+      this.setState({userInfoResponse, accessToken, type}, () => console.log('user info response to state'));
+      console.log('Access token: ', accessToken ? accessToken : undefined)
     }
     }
 
-  async getFiles(){
-    const { accessToken } = this.state; 
+  getFiles(){
+    const { accessToken, files } = this.state; 
     this.setState({fetching: true});
     if(accessToken !== null){
-      try{
-        let files = await fetch('https://www.googleapis.com/drive/v3/files',{
+      fetch('https://www.googleapis.com/drive/v3/files',{
           headers: { Authorization: `Bearer ${accessToken}` }
-        });
-      this.setState({files: JSON.stringify(files), fetching: false}, () => console.log(this.state.files, 'this has been returned !'));
-      }catch(err){
-        console.log(err, 'this is the error');
-      }
+      })
+      .then(response => response.json())
+      .then(data => this.setState({files: data.files, fetching: false}, () => console.log('Files: ', files ? files : undefined)))
+      .catch(err => console.log(err, 'this error occurred when trying to get the files'));
     }
   }
 
   render(){
-    const { fetching, accessToken } = this.state;
-    console.log(accessToken ? accessToken : undefined, 'access token info' )
+    const { fetching, files} = this.state;
     return (
       <View style={styles.container}>
-        <Text>{this.state.accessToken ? 'Access token saved to state' : 'working now'}</Text>
+        <Text>{this.state.accessToken ? 'Access token saved to state' : 'Authenticating'}</Text>
         <Button onPress={() => this.getFiles()} title="Fetch Files" />
         <Text>{fetching ? 'fetching files': undefined}</Text>
+
+        <SafeAreaView style={styles.container}>
+          <FlatList
+            data={files && files}
+            renderItem={({ item }) => <Text>{item.name}</Text>}
+            keyExtractor={item => item.id}
+          />
+        </SafeAreaView>
       </View>
     );
   }
