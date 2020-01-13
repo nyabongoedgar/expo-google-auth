@@ -13,7 +13,8 @@ export default class App extends React.Component {
       files: null,
       fetching: false,
       uploading: false,
-      wallet: null
+      wallet: null,
+      metaDataForUploadedFile: null,
     }
   }
   componentDidMount(){
@@ -28,7 +29,7 @@ export default class App extends React.Component {
       scopes: ['profile', 'email','https://www.googleapis.com/auth/drive.appdata','https://www.googleapis.com/auth/drive'],
     };
     const { type, accessToken, user } = await Google.logInAsync(config);
-    console.log(accessToken, 'this is the access token')
+    console.log(accessToken, 'this is the access token!!!!!!')
     
     if (type === 'success') {
       // Then you can use the Google REST API
@@ -84,7 +85,10 @@ export default class App extends React.Component {
           body: multipartBody
         })
         .then(response => response.json())
-        .then(metaData => alert(JSON.stringify(metaData)))
+        .then(metaData => {
+          this.setState({metaDataForUploadedFile: metaData});
+          alert(JSON.stringify(metaData));
+        }) //metadata has {kind, id, name, mimeType}
         .catch(err => console.log(err, 'this is the error'))
       }else{
         alert('No google access token detected ! Also make sure the Wallet data is present')
@@ -94,6 +98,35 @@ export default class App extends React.Component {
     }
     
   }
+
+  getFileFromDriveAppDataFolder() {
+    const {accessToken} = this.state;
+    if(accessToken !== null){
+        const qParams = encodeURIComponent("name = 'data.json' and 'appDataFolder' in parents")
+        return fetch(`https://www.googleapis.com/drive/v3/files?q=${qParams}&spaces=appDataFolder`, {
+          headers: {Authorization: `Bearer ${accessToken}`}
+        })
+          .then(response => response.json())
+          .then((body) => {
+            if (body && body.files && body.files.length > 0) alert(body.files[0])
+            return null
+          })
+          .catch(err => alert(JSON.stringify(err)))
+    }else{
+      alert('No access token in state')
+    }
+  }
+
+// download the file contents given the id
+downloadFile() {
+  const { accessToken, metaDataForUploadedFile } = this.state;
+  if (!metaDataForUploadedFile.id) throw new Error('Didn\'t provide a valid file id.')
+  return fetch(`https://www.googleapis.com/drive/v3/files/${metaDataForUploadedFile.id}?alt=media`, {
+    headers: {Authorization: `Bearer ${accessToken}`}
+  })
+    .then(response => response.json())
+    .then(data => alert(JSON.stringify(data)))
+}
 
   storeData = async () => {
     try {
@@ -121,7 +154,9 @@ export default class App extends React.Component {
   }
 
   render(){
-    const {fetching, files} = this.state;
+    const {fetching, files, metaDataForUploadedFile} = this.state;
+    console.log('ID for file', metaDataForUploadedFile ? metaDataForUploadedFile.id : 'no id found');
+    console.log(this.state.accessToken && this.state.accessToken, 'this is the access token!!!!!!')
     return (
       <View style={styles.container}>
         <Text>{this.state.accessToken ? 'Access token saved to state' : 'Authenticating'}</Text>
@@ -129,15 +164,17 @@ export default class App extends React.Component {
         {/* Button to fetch files from google drive */}
         <Button disabled={files ? true : false} onPress={() => this.getFiles()} title="Fetch files from your Google Drive" />
         <Text>{fetching ? 'fetching files': undefined}</Text>
+    <Text>{metaDataForUploadedFile ? metaDataForUploadedFile.id : 'No ID yet'}</Text>
 
         {/**  Button to save application data to Google Drive App Data Folder 
          * First we need to **/}
-        <Button onPress={() => this.storeData()} title={'Save data to Offline Storage'} />
+        <Button onPress={() => this.storeData()} title={'1. Save data to Offline Storage'} />
         <Gap />
       
         <Gap />
-        <Button onPress={() => this.storeDataToDrive()} title={'Save App Data to Google Drive AppData Folder'} />
-
+        <Button onPress={() => this.storeDataToDrive()} title={'2. Save App Data to Google Drive AppData Folder'} />
+        <Text>{this.state.accessToken ? this.state.accessToken : undefined}</Text>
+        <Button onPress={() => this.downloadFile()} title="3. Download File from App Data"/>
         <SafeAreaView style={styles.container}>
           <FlatList
             data={files && files}
